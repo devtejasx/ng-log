@@ -418,6 +418,11 @@ class LogFileObject : public base::Logger {
   uint32 bytes_since_flush_{0};
   uint32 dropped_mem_length_{0};
   uint32 file_length_{0};
+  // Incremented every time a new underlying file is opened (initial
+  // creation or rollover). Lets Write() detect whether the file was
+  // rotated by a concurrent call while mutex_ was released to perform an
+  // out-of-band posix_fadvise().
+  uint64_t generation_{0};
   unsigned int rollover_attempt_;
   std::chrono::system_clock::time_point
       next_flush_time_;  // cycle count at which to flush log
@@ -1048,6 +1053,7 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
     }
     return false;
   }
+  ++generation_;
 #ifdef NGLOG_OS_WINDOWS
   // https://github.com/golang/go/issues/27638 - make sure we seek to the end to
   // append empirically replicated with wine over mingw build
@@ -1103,7 +1109,7 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
 void LogFileObject::Write(
     bool force_flush, const std::chrono::system_clock::time_point& timestamp,
     const char* message, size_t message_len) {
-  std::lock_guard<std::mutex> l{mutex_};
+  std::unique_lock<std::mutex> l{mutex_};
 
   // We don't log if the base_name_ is "" (which means "don't write")
   if (base_filename_selected_ && base_filename_.empty()) {
@@ -1282,12 +1288,38 @@ void LogFileObject::Write(
       uint32 this_drop_length = total_drop_length - dropped_mem_length_;
       if (this_drop_length >= (2U << 20U)) {
         // Only advise when >= 2MiB to drop
+        bool update_dropped_length = true;
 #  if defined(HAVE_POSIX_FADVISE)
-        posix_fadvise(
-            fileno(file_.get()), static_cast<off_t>(dropped_mem_length_),
-            static_cast<off_t>(this_drop_length), POSIX_FADV_DONTNEED);
+        // posix_fadvise() can block for a substantial amount of time (e.g.,
+        // due to kernel-internal LRU draining or writeback under I/O
+        // pressure). Duplicate the descriptor and release mutex_ while the
+        // syscall runs so that other threads logging to this file are not
+        // serialized behind it. The duplicate keeps the underlying open
+        // file description alive even if this file gets rolled over while
+        // the lock is released.
+        FileDescriptor fd{dup(fileno(file_.get()))};
+        if (fd) {
+          const uint64_t generation = generation_;
+          const off_t offset = static_cast<off_t>(dropped_mem_length_);
+          const off_t length = static_cast<off_t>(this_drop_length);
+
+          l.unlock();
+          posix_fadvise(fd.get(), offset, length, POSIX_FADV_DONTNEED);
+          l.lock();
+
+          // Only account for the drop if the file was not rolled over
+          // while the lock was released; otherwise dropped_mem_length_
+          // already refers to the new file.
+          update_dropped_length = (generation == generation_);
+        } else {
+          posix_fadvise(
+              fileno(file_.get()), static_cast<off_t>(dropped_mem_length_),
+              static_cast<off_t>(this_drop_length), POSIX_FADV_DONTNEED);
+        }
 #  endif
-        dropped_mem_length_ = total_drop_length;
+        if (update_dropped_length) {
+          dropped_mem_length_ = total_drop_length;
+        }
       }
     }
 #endif

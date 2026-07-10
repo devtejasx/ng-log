@@ -121,6 +121,7 @@ static void TestErrno();
 static void TestTruncate();
 static void TestCustomLoggerDeletionOnShutdown();
 static void TestLogPeriodically();
+static void TestDropLogMemoryConcurrentWriters();
 
 static int x = -1;
 static void BM_Check1(int n) {
@@ -298,6 +299,7 @@ int main(int argc, char** argv) {
   TestWrapper();
   TestErrno();
   TestTruncate();
+  TestDropLogMemoryConcurrentWriters();
   TestCustomLoggerDeletionOnShutdown();
   TestLogPeriodically();
 
@@ -1105,6 +1107,72 @@ static void TestTruncate() {
   TestOneTruncate(fdpath, 10, 10, 10, 10, 10);
 #  endif
 
+#endif
+}
+
+static void TestDropLogMemoryConcurrentWriters() {
+#if defined(NGLOG_OS_LINUX) && defined(HAVE_POSIX_FADVISE)
+  fprintf(stderr,
+          "==== Test concurrent writers while drop_log_memory triggers "
+          "posix_fadvise\n");
+  const std::string dest = FLAGS_test_tmpdir + "/logging_test_drop_log_memory";
+  DeleteFiles(dest + "*");
+
+  const bool old_drop_log_memory = FLAGS_drop_log_memory;
+  const int32 old_logbufsecs = FLAGS_logbufsecs;
+  // Force every write to flush and re-evaluate the drop_log_memory
+  // threshold, so that posix_fadvise() is exercised multiple times while
+  // other threads are concurrently appending to the same log file.
+  FLAGS_drop_log_memory = true;
+  FLAGS_logbufsecs = 0;
+
+  SetLogDestination(NGLOG_INFO, dest.c_str());
+
+  constexpr int kThreads = 8;
+  constexpr int kMessagesPerThread = 400;
+  const std::string filler(3000, 'x');
+
+  std::vector<std::thread> threads;
+  threads.reserve(kThreads);
+  for (int t = 0; t < kThreads; ++t) {
+    threads.emplace_back([&filler] {
+      for (int i = 0; i < kMessagesPerThread; ++i) {
+        LOG(INFO) << filler;
+      }
+    });
+  }
+  // Joining is itself the test: if posix_fadvise() were still called while
+  // holding the per-file mutex, threads writing to the same log would
+  // serialize behind it. Reaching this point without one of the writer
+  // threads getting stuck confirms the lock is released around the call.
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  FlushLogFiles(NGLOG_INFO);
+
+  // None of the concurrently written messages should have been lost or
+  // corrupted by unlocking mutex_ around posix_fadvise().
+  std::vector<std::string> filenames;
+  GetFiles(dest + "*", &filenames);
+  CHECK_EQ(filenames.size(), 1UL);
+
+  std::ifstream file(filenames[0]);
+  CHECK(file.is_open()) << ": could not open " << filenames[0];
+  int line_count = 0;
+  for (std::string line; std::getline(file, line);) {
+    if (line.find(filler) != std::string::npos) {
+      ++line_count;
+    }
+  }
+  CHECK_EQ(line_count, kThreads * kMessagesPerThread);
+
+  // Release file handle for the destination file to unlock the file in
+  // Windows.
+  LogToStderr();
+  DeleteFiles(dest + "*");
+  FLAGS_drop_log_memory = old_drop_log_memory;
+  FLAGS_logbufsecs = old_logbufsecs;
 #endif
 }
 
