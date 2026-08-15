@@ -289,6 +289,8 @@ constexpr bool operator!=(std::nullptr_t, const FileDescriptor& rhs) noexcept {
 
 }  // namespace tools
 
+void DumpStackFrameInfo(const char* prefix, void* pc);
+
 }  // namespace nglog
 
 template <>
