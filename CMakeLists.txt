@@ -788,31 +788,27 @@ if (BUILD_TESTING AND GTest_FOUND)
     $<TARGET_PROPERTY:ng-log,COMPILE_FEATURES>)
   target_include_directories (ng-log_test INTERFACE $<TARGET_PROPERTY:ng-log,INCLUDE_DIRECTORIES>)
 
-  if (HAVE_SUBPROCESS)
-    add_executable (email_test_helper
-      src/email_test_helper.cc
-    )
-  endif (HAVE_SUBPROCESS)
+  add_executable (email_test_helper
+    src/email_test_helper.cc
+  )
 
   add_executable (logging_unittest
     src/logging_unittest.cc
   )
 
   target_link_libraries (logging_unittest PRIVATE ng-log_test)
-  if (HAVE_SUBPROCESS)
-    add_dependencies (logging_unittest email_test_helper)
-    target_compile_definitions (logging_unittest PRIVATE
-      EMAIL_TEST_HELPER_PATH="$<TARGET_FILE:email_test_helper>"
-    )
-  endif (HAVE_SUBPROCESS)
+  add_dependencies (logging_unittest email_test_helper)
+  target_compile_definitions (logging_unittest PRIVATE
+    EMAIL_TEST_HELPER_PATH="$<TARGET_FILE:email_test_helper>"
+  )
 
-  if (HAVE_SUBPROCESS AND MINGW)
+  if (MINGW)
     # Statically linked because this helper runs as a child process and must
     # not depend on MinGW runtime DLLs being available on the child's PATH.
     target_link_options (email_test_helper PRIVATE
       -static -static-libgcc -static-libstdc++
     )
-  endif (HAVE_SUBPROCESS AND MINGW)
+  endif (MINGW)
 
   add_executable (platform_unittest
     src/platform_unittest.cc

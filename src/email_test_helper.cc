@@ -3,19 +3,31 @@
 //
 // Author: Sergiu Deitsch
 //
-// A dependency-free slow mailer used by logging_unittest.cc. It records that
-// the mailer has started, then stays alive long enough to expose logging lock
+// A dependency-free mailer used by logging_unittest.cc. It consumes the
+// message before optionally staying alive long enough to expose logging lock
 // contention.
 
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <string>
 #include <thread>
 
 namespace {
 constexpr std::chrono::seconds kMailerDelay{1};
 constexpr char kMailerMarkerEnvironment[] = "NGLOG_TEST_MAILER_MARKER";
+constexpr std::size_t kInputBufferSize = 4096;
+
+bool ConsumeInput() {
+  std::array<char, kInputBufferSize> buffer{};
+  while (std::cin.read(buffer.data(),
+                       static_cast<std::streamsize>(buffer.size())) ||
+         std::cin.gcount() != 0) {
+  }
+  return !std::cin.bad();
+}
 }  // namespace
 
 int main() {
@@ -30,9 +42,12 @@ int main() {
       return EXIT_FAILURE;
     }
     marker.close();
-  } else {
+  }
+  if (!ConsumeInput()) {
     return EXIT_FAILURE;
   }
-  std::this_thread::sleep_for(kMailerDelay);
+  if (marker_path != nullptr) {
+    std::this_thread::sleep_for(kMailerDelay);
+  }
   return 0;
 }

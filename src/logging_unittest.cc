@@ -2630,7 +2630,7 @@ TEST(LogMsgTime, gmtoffSubHour) {
 
 TEST(EmailLogging, ValidAddress) {
   FlagSaver saver;
-  FLAGS_logmailer = "/usr/bin/true";
+  FLAGS_logmailer = EMAIL_TEST_HELPER_PATH;
 
   EXPECT_TRUE(
       SendEmail("example@example.com", "Example subject", "Example body"));
@@ -2638,7 +2638,7 @@ TEST(EmailLogging, ValidAddress) {
 
 TEST(EmailLogging, MultipleAddresses) {
   FlagSaver saver;
-  FLAGS_logmailer = "/usr/bin/true";
+  FLAGS_logmailer = EMAIL_TEST_HELPER_PATH;
 
   EXPECT_TRUE(SendEmail("example@example.com,foo@bar.com", "Example subject",
                         "Example body"));
@@ -2646,14 +2646,14 @@ TEST(EmailLogging, MultipleAddresses) {
 
 TEST(EmailLogging, InvalidAddress) {
   FlagSaver saver;
-  FLAGS_logmailer = "/usr/bin/true";
+  FLAGS_logmailer = EMAIL_TEST_HELPER_PATH;
 
   EXPECT_FALSE(SendEmail("hello world@foo", "Example subject", "Example body"));
 }
 
 TEST(EmailLogging, MaliciousAddress) {
   FlagSaver saver;
-  FLAGS_logmailer = "/usr/bin/true";
+  FLAGS_logmailer = EMAIL_TEST_HELPER_PATH;
 
   EXPECT_FALSE(
       SendEmail("!/bin/true@example.com", "Example subject", "Example body"));
