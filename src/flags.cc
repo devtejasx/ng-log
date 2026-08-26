@@ -52,11 +52,7 @@ static const char* DefaultLogDir() {
 }
 
 bool BoolFromEnv(const char* varname, bool defval) {
-  const char* const valstr = getenv(varname);
-  if (!valstr) {
-    return defval;
-  }
-  return std::memchr("tTyY1\0", valstr[0], 6) != nullptr;
+  return nglog::internal::EnvValueToBool(getenv(varname), defval);
 }
 
 }  // namespace

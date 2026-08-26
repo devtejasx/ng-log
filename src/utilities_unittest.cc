@@ -39,6 +39,7 @@
 #  include <pthread.h>
 #endif
 
+#include "base/commandlineflags.h"
 #include "internal/emscripten_console.h"
 #include "ng-log/logging.h"
 #include "testing_utilities.h"
@@ -136,6 +137,35 @@ TEST(utilities, SetThreadName) {
   EXPECT_STREQ(thread_name, kThreadName);
 }
 #endif
+
+// A boolean flag environment variable that is unset or empty means "not
+// configured"; only the documented true spellings select true.  An empty
+// value used to match the terminating null character of the "tTyY1" search
+// string and read as true, so exporting the variable with no value silently
+// turned the flag on.
+TEST(commandlineflags, EnvValueToBoolAcceptsDocumentedTrueValues) {
+  for (const char* value : {"1", "t", "T", "true", "True", "y", "Y", "yes"}) {
+    EXPECT_TRUE(nglog::internal::EnvValueToBool(value, false))
+        << "value: " << value;
+  }
+}
+
+TEST(commandlineflags, EnvValueToBoolAcceptsDocumentedFalseValues) {
+  for (const char* value : {"0", "f", "false", "n", "no", "No"}) {
+    EXPECT_FALSE(nglog::internal::EnvValueToBool(value, true))
+        << "value: " << value;
+  }
+}
+
+TEST(commandlineflags, EnvValueToBoolTreatsEmptyValueAsUnset) {
+  EXPECT_FALSE(nglog::internal::EnvValueToBool("", false));
+  EXPECT_TRUE(nglog::internal::EnvValueToBool("", true));
+}
+
+TEST(commandlineflags, EnvValueToBoolTreatsMissingVariableAsUnset) {
+  EXPECT_FALSE(nglog::internal::EnvValueToBool(nullptr, false));
+  EXPECT_TRUE(nglog::internal::EnvValueToBool(nullptr, true));
+}
 
 int main(int argc, char** argv) {
   InitializeLogging(argv[0]);

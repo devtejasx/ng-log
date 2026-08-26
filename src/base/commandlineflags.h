@@ -140,9 +140,30 @@
 
 #define EnvToString(envname, dflt) (!getenv(envname) ? (dflt) : getenv(envname))
 
+namespace nglog {
+namespace internal {
+
+// Interprets the textual value of a boolean flag environment variable, as
+// documented in docs/flags.md: 1/true/yes select true and 0/false/no select
+// false, case-insensitively, decided by the leading character.  A variable
+// that is unset or set to the empty string means "not configured" and yields
+// |dflt|.
+//
+// The search must not cover the terminating null character of "tTyY1": doing
+// so made an empty value match and silently read as true, so merely exporting
+// NGLOG_logtostderr with no value turned the flag on.
+inline bool EnvValueToBool(const char* value, bool dflt) {
+  if (value == nullptr || value[0] == '\0') {
+    return dflt;
+  }
+  return memchr("tTyY1", value[0], 5) != nullptr;
+}
+
+}  // namespace internal
+}  // namespace nglog
+
 #define EnvToBool(envname, dflt) \
-  (!getenv(envname) ? (dflt)     \
-                    : memchr("tTyY1\0", getenv(envname)[0], 6) != nullptr)
+  (nglog::internal::EnvValueToBool(getenv(envname), (dflt)))
 
 #define EnvToInt(envname, dflt) \
   (!getenv(envname) ? (dflt)    \
