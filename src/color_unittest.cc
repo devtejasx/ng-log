@@ -51,10 +51,31 @@ TEST(Flags, SymbolizeFileBasePathIgnoresEnvironment) {
 }
 
 TEST(ShouldColorize, NoColorEnvWins) {
-  EXPECT_FALSE(ShouldColorize(/*is_a_tty=*/true, "xterm", /*no_color_env=*/"",
+  EXPECT_FALSE(ShouldColorize(/*is_a_tty=*/true, "xterm", /*no_color_env=*/"1",
                               /*clicolor_force_env=*/nullptr));
   EXPECT_FALSE(ShouldColorize(/*is_a_tty=*/true, "xterm",
                               /*no_color_env=*/"1", "1"));
+  // Any value at all opts out, per https://no-color.org.
+  EXPECT_FALSE(ShouldColorize(/*is_a_tty=*/true, "xterm",
+                              /*no_color_env=*/"0",
+                              /*clicolor_force_env=*/nullptr));
+  EXPECT_FALSE(ShouldColorize(/*is_a_tty=*/true, "xterm",
+                              /*no_color_env=*/"false",
+                              /*clicolor_force_env=*/nullptr));
+}
+
+// https://no-color.org specifies the opt-out applies "when present and not an
+// empty string", so an exported but empty NO_COLOR must not suppress colour.
+// Exporting a variable with no value is how a shell clears configuration, and
+// CLICOLOR_FORCE already draws the same distinction.
+TEST(ShouldColorize, EmptyNoColorEnvIsNotAnOptOut) {
+  EXPECT_TRUE(ShouldColorize(/*is_a_tty=*/true, "xterm", /*no_color_env=*/"",
+                             /*clicolor_force_env=*/nullptr));
+  EXPECT_TRUE(ShouldColorize(/*is_a_tty=*/false, "xterm", /*no_color_env=*/"",
+                             /*clicolor_force_env=*/"1"));
+  // Still nothing to colourize without a terminal.
+  EXPECT_FALSE(ShouldColorize(/*is_a_tty=*/false, "xterm", /*no_color_env=*/"",
+                              /*clicolor_force_env=*/nullptr));
 }
 
 TEST(ShouldColorize, CliColorForceOverridesNonTty) {

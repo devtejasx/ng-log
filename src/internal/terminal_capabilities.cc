@@ -134,7 +134,10 @@ bool ComputeStreamSupportsHyperlinks(FILE* stream) {
 
 bool ShouldColorize(bool is_a_tty, const char* term, const char* no_color_env,
                     const char* clicolor_force_env) {
-  if (no_color_env != nullptr) {
+  // https://no-color.org: colour is suppressed "when present and not an empty
+  // string (regardless of its value)". An empty NO_COLOR is therefore not an
+  // opt-out, the same distinction CLICOLOR_FORCE makes below.
+  if (no_color_env != nullptr && no_color_env[0] != '\0') {
     return false;
   }
 
