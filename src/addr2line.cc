@@ -223,7 +223,6 @@ std::size_t RunAddr2Line(char* const argv[], char* out, std::size_t out_size) {
   char* envp[] = {nullptr};
 
   const std::chrono::milliseconds timeout{FLAGS_addr2line_timeout_ms};
-  const auto deadline = std::chrono::steady_clock::now() + timeout;
   Addr2LineSubprocess process;
 
   if (!process.Spawn(argv, envp)) {
@@ -231,6 +230,14 @@ std::size_t RunAddr2Line(char* const argv[], char* out, std::size_t out_size) {
   }
 
   process.CloseStdin();
+
+  // Start the budget only once addr2line is running. Creating the process is
+  // not addr2line answering, and it is not free: on Windows it costs upwards
+  // of 100 ms. Starting the clock before the spawn spends the whole budget
+  // getting to the point where there is something to wait for, so addr2line
+  // is given no time at all to produce a line and every address silently
+  // resolves to nothing.
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
 
   std::size_t total_read = 0;
 

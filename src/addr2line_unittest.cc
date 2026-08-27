@@ -460,32 +460,56 @@ TEST(Addr2LineSymbolizeCallback, DoesNotHangOnAnUnresponsiveAddr2Line) {
 }
 
 TEST(Addr2LineSymbolizeCallback, UsesOneTimeoutForSlowOutput) {
-  const std::string dir = MakeScratchDirectory();
-  const std::string fake_executable =
-      MakeFakeAddr2Line(dir, ADDR2LINE_FAKE_SLOW_PATH);
+  using std::chrono::milliseconds;
+  constexpr nglog::int32 kTimeoutMs = 40;
 
-  {
-    ScopedPathOverride scoped_path(dir.c_str());
-    const nglog::int32 previous_timeout_ms = FLAGS_addr2line_timeout_ms;
-    FLAGS_addr2line_timeout_ms = 40;
-    EXPECT_TRUE(InstallAddr2LineSymbolizeCallback());
+  // Creating a process costs far more than the timeout under test on some
+  // platforms -- upwards of 100 ms on Windows -- so an absolute bound on the
+  // elapsed time measures process creation rather than the timeout policy,
+  // and fails whenever the machine is busy. Measure the spawn cost with a
+  // fake that exits immediately and bound the slow case relative to it.
+  const auto measure = [](const char* helper_path, bool* resolved) {
+    const std::string dir = MakeScratchDirectory();
+    const std::string fake_executable = MakeFakeAddr2Line(dir, helper_path);
+    milliseconds elapsed{};
 
-    char symbol[4096];
-    const auto start = std::chrono::steady_clock::now();
-    const bool resolved = ResolveFunctionAndLine(
-        "missing.exe", reinterpret_cast<void*>(1), 0, symbol, sizeof(symbol),
-        SymbolizeOptions::kNone, nullptr);
-    const auto elapsed = std::chrono::steady_clock::now() - start;
+    {
+      ScopedPathOverride scoped_path(dir.c_str());
+      const nglog::int32 previous_timeout_ms = FLAGS_addr2line_timeout_ms;
+      FLAGS_addr2line_timeout_ms = kTimeoutMs;
+      EXPECT_TRUE(InstallAddr2LineSymbolizeCallback());
 
-    FLAGS_addr2line_timeout_ms = previous_timeout_ms;
-    EXPECT_FALSE(resolved);
-    EXPECT_GE(elapsed, std::chrono::milliseconds{20});
-    EXPECT_LT(elapsed, std::chrono::milliseconds{160});
-    InstallSymbolizeCallback(nullptr);
-  }
+      char symbol[4096];
+      const auto start = std::chrono::steady_clock::now();
+      *resolved = ResolveFunctionAndLine(
+          "missing.exe", reinterpret_cast<void*>(1), 0, symbol, sizeof(symbol),
+          SymbolizeOptions::kNone, nullptr);
+      elapsed = std::chrono::duration_cast<milliseconds>(
+          std::chrono::steady_clock::now() - start);
 
-  RemoveFakeAddr2Line(fake_executable);
-  RemoveScratchDirectory(dir);
+      FLAGS_addr2line_timeout_ms = previous_timeout_ms;
+      InstallSymbolizeCallback(nullptr);
+    }
+
+    RemoveFakeAddr2Line(fake_executable);
+    RemoveScratchDirectory(dir);
+    return elapsed;
+  };
+
+  bool baseline_resolved = true;
+  const milliseconds baseline =
+      measure(ADDR2LINE_FAKE_EMPTY_PATH, &baseline_resolved);
+  EXPECT_FALSE(baseline_resolved);
+
+  bool slow_resolved = true;
+  const milliseconds slow = measure(ADDR2LINE_FAKE_SLOW_PATH, &slow_resolved);
+  EXPECT_FALSE(slow_resolved);
+
+  // A single shared budget stops reading about kTimeoutMs after the first
+  // read; a budget restarted for every read instead follows the fake all the
+  // way to the end of its output, which takes roughly 200 ms.
+  EXPECT_GE(slow, baseline + milliseconds{kTimeoutMs / 2});
+  EXPECT_LT(slow, baseline + milliseconds{2 * kTimeoutMs});
 }
 
 TEST(Addr2LineSymbolizeCallback, RejectsUnsuccessfulAddr2LineExit) {
