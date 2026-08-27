@@ -98,6 +98,51 @@ TEST(CheckedAdd, RejectsSignedOverflowAndUnderflow) {
       nglog::internal::CheckedAdd(std::numeric_limits<int>::min(), -1, result));
 }
 
+TEST(CheckedMultiply, SupportsUnsignedOperands) {
+  std::uint32_t result = 0;
+  EXPECT_TRUE(nglog::internal::CheckedMultiply(std::uint32_t{7},
+                                               std::uint32_t{3}, result));
+  EXPECT_EQ(21U, result);
+  EXPECT_TRUE(nglog::internal::CheckedMultiply(
+      std::uint32_t{0}, std::numeric_limits<std::uint32_t>::max(), result));
+  EXPECT_EQ(0U, result);
+  EXPECT_FALSE(nglog::internal::CheckedMultiply(
+      std::numeric_limits<std::uint32_t>::max(), std::uint32_t{2}, result));
+}
+
+// Products that fit must be accepted whatever the signs are. Comparing only
+// against max() / left rejected every one of these.
+TEST(CheckedMultiply, SupportsSignedOperands) {
+  int result = 0;
+  EXPECT_TRUE(nglog::internal::CheckedMultiply(-1, 2, result));
+  EXPECT_EQ(-2, result);
+  EXPECT_TRUE(nglog::internal::CheckedMultiply(-3, 5, result));
+  EXPECT_EQ(-15, result);
+  EXPECT_TRUE(nglog::internal::CheckedMultiply(3, -5, result));
+  EXPECT_EQ(-15, result);
+  EXPECT_TRUE(nglog::internal::CheckedMultiply(-3, -5, result));
+  EXPECT_EQ(15, result);
+  EXPECT_TRUE(nglog::internal::CheckedMultiply(
+      0, std::numeric_limits<int>::min(), result));
+  EXPECT_EQ(0, result);
+}
+
+// These overflow, and the previous check reported that they did not, so the
+// multiplication went ahead and overflowed a signed integer.
+TEST(CheckedMultiply, RejectsSignedOverflowAndUnderflow) {
+  int result = 0;
+  EXPECT_FALSE(nglog::internal::CheckedMultiply(2, -2000000000, result));
+  EXPECT_FALSE(nglog::internal::CheckedMultiply(-2, -2000000000, result));
+  EXPECT_FALSE(nglog::internal::CheckedMultiply(
+      -1, std::numeric_limits<int>::min(), result));
+  EXPECT_FALSE(nglog::internal::CheckedMultiply(-100000, 100000, result));
+  EXPECT_FALSE(nglog::internal::CheckedMultiply(46341, 46341, result));
+  EXPECT_FALSE(nglog::internal::CheckedMultiply(std::numeric_limits<int>::max(),
+                                                2, result));
+  EXPECT_FALSE(nglog::internal::CheckedMultiply(std::numeric_limits<int>::min(),
+                                                2, result));
+}
+
 // Avoid compile error due to "cast between pointer-to-function and
 // pointer-to-object is an extension" warnings.
 #if defined(__GNUG__)
