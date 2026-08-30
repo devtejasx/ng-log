@@ -58,7 +58,15 @@ NGLOG_NO_EXPORT bool SafeFNMatch_(const char* pattern, size_t patt_len,
   while (true) {
     if (p == patt_len && s == str_len) return true;
     if (p == patt_len) return false;
-    if (s == str_len) return p + 1 == patt_len && pattern[p] == '*';
+    if (s == str_len) {
+      // The string is exhausted, so the rest of the pattern has to be
+      // able to match nothing at all: every remaining character must
+      // be a '*'.
+      for (; p != patt_len; ++p) {
+        if (pattern[p] != '*') return false;
+      }
+      return true;
+    }
     if (pattern[p] == str[s] || pattern[p] == '?') {
       p += 1;
       s += 1;

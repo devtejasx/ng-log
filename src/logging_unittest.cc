@@ -2168,6 +2168,15 @@ TEST(SafeFNMatch, logging) {
   CHECK(WrapSafeFNMatch("ba?/*", "bar/"));
   CHECK(!WrapSafeFNMatch("ba?/?", "bar/"));
   CHECK(!WrapSafeFNMatch("ba?/*", "bar"));
+  // A run of trailing wildcards has to match the empty remainder too.
+  CHECK(WrapSafeFNMatch("**", ""));
+  CHECK(WrapSafeFNMatch("a**", "a"));
+  CHECK(WrapSafeFNMatch("a***", "a"));
+  CHECK(WrapSafeFNMatch("foo**", "foo"));
+  CHECK(WrapSafeFNMatch("*foo**", "xfoo"));
+  CHECK(WrapSafeFNMatch("foo**", "foox"));
+  CHECK(!WrapSafeFNMatch("a**b", "a"));
+  CHECK(!WrapSafeFNMatch("**a", ""));
 }
 
 // TestWaitingLogSink will save messages here
