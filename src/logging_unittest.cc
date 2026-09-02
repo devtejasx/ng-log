@@ -603,6 +603,24 @@ void TestVLogModule() {
 #endif
 }
 
+#if defined(__GNUC__)
+TEST(SetVLOGLevel, ASpecificPatternIsNotSwallowedByAMatchingWildcard) {
+  // Patterns chosen so that they match no real source file: the entries stay
+  // in the global vmodule list for the rest of the run.
+  ASSERT_EQ(0, SetVLOGLevel("setvloglevel_probe*", 1));
+
+  // "setvloglevel_probe*" matches "setvloglevel_probe", so it supplies the
+  // level in effect before this call, but it is not an entry that can hold
+  // the new one. The specific pattern still has to be recorded.
+  EXPECT_EQ(1, SetVLOGLevel("setvloglevel_probe", 3));
+  EXPECT_EQ(3, SetVLOGLevel("setvloglevel_probe", 0));
+  EXPECT_EQ(0, SetVLOGLevel("setvloglevel_probe", 0));
+
+  // The wildcard entry itself is untouched.
+  EXPECT_EQ(1, SetVLOGLevel("setvloglevel_probe*", 1));
+}
+#endif
+
 TEST(DeathRawCHECK, logging) {
   ASSERT_DEATH(RAW_CHECK(false, "failure 1"),
                "RAW: Check false failed: failure 1");

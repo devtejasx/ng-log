@@ -144,26 +144,32 @@ static void VLOG2Initializer() {
 int SetVLOGLevel(const char* module_pattern, int log_level) {
   int result = FLAGS_v;
   size_t const pattern_len = strlen(module_pattern);
-  bool found = false;
+  // Whether result already holds the level in effect before this call. A
+  // pattern that merely matches module_pattern, such as "foo*" for "foo",
+  // supplies that level but is not an entry we can store into.
+  bool found_level = false;
+  // Whether an entry for exactly this pattern was updated in place.
+  bool found_entry = false;
   {
     std::lock_guard<std::mutex> l(
         vmodule_mutex);  // protect whole read-modify-write
     for (const VModuleInfo* info = vmodule_list; info != nullptr;
          info = info->next) {
       if (info->module_pattern == module_pattern) {
-        if (!found) {
+        if (!found_level) {
           result = info->vlog_level.load(std::memory_order_relaxed);
-          found = true;
+          found_level = true;
         }
+        found_entry = true;
         info->vlog_level.store(log_level, std::memory_order_relaxed);
-      } else if (!found && SafeFNMatch_(info->module_pattern.c_str(),
-                                        info->module_pattern.size(),
-                                        module_pattern, pattern_len)) {
+      } else if (!found_level && SafeFNMatch_(info->module_pattern.c_str(),
+                                              info->module_pattern.size(),
+                                              module_pattern, pattern_len)) {
         result = info->vlog_level.load(std::memory_order_relaxed);
-        found = true;
+        found_level = true;
       }
     }
-    if (!found) {
+    if (!found_entry) {
       auto* info = new VModuleInfo;
       info->module_pattern = module_pattern;
       info->vlog_level.store(log_level, std::memory_order_relaxed);
