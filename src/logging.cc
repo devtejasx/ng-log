@@ -2792,7 +2792,9 @@ static void GetTempDirectories(vector<string>& list) {
   };
 
   for (auto d : candidates) {
-    if (!d) continue;  // Empty env var
+    // Unset, or set to the empty string: neither names a directory, and an
+    // empty one would index out of bounds below and then add "/" to the list.
+    if (!d || *d == '\0') continue;
 
     // Make sure we don't surprise anyone who's expecting a '/'
     string dstr = d;
