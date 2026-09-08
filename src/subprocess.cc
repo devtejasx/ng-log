@@ -36,21 +36,45 @@ inline namespace tools {
 
 namespace {
 
+// ng-log takes narrow strings to be UTF-8 on Windows: SetThreadName() in
+// utilities.cc widens with CP_UTF8, and signalhandler.cc and symbolize.cc
+// narrow with it. Widening a byte at a time instead reads those strings as
+// Latin-1, so any argument or environment entry outside ASCII -- a log
+// directory under a user name with an umlaut, say -- reaches CreateProcessW()
+// as a path that does not exist.
+std::wstring WidenUtf8(const char* narrow, std::size_t length) {
+  if (length == 0) {
+    return std::wstring{};
+  }
+
+  const int size = MultiByteToWideChar(CP_UTF8, 0, narrow,
+                                       static_cast<int>(length), nullptr, 0);
+  if (size <= 0) {
+    return std::wstring{};
+  }
+
+  std::wstring wide(static_cast<std::size_t>(size), L'\0');
+  if (MultiByteToWideChar(CP_UTF8, 0, narrow, static_cast<int>(length),
+                          &wide[0], size) <= 0) {
+    return std::wstring{};
+  }
+
+  return wide;
+}
+
+std::wstring WidenUtf8(const char* narrow) {
+  return WidenUtf8(narrow, std::strlen(narrow));
+}
+
 // CreateProcessW() takes a single, already-quoted command line rather
 // than an argv[] array. This quotes and appends |arg| to |out| following
 // the rules the Microsoft C runtime itself uses to later split that
 // command line back into argv[], so that a round trip through
 // CreateProcessW() reproduces |arg| exactly, including embedded spaces,
 // quotes, or backslashes.
-void AppendQuotedArg(const char* arg, std::wstring& out) {
+void AppendQuotedArg(const std::wstring& warg, std::wstring& out) {
   if (!out.empty()) {
     out += L' ';
-  }
-
-  std::wstring warg;
-  while (*arg != '\0') {
-    warg += static_cast<wchar_t>(static_cast<unsigned char>(*arg));
-    ++arg;
   }
 
   if (!warg.empty() && warg.find_first_of(L" \t\n\v\"") == std::wstring::npos) {
@@ -83,6 +107,10 @@ void AppendQuotedArg(const char* arg, std::wstring& out) {
   }
 
   out += L'"';
+}
+
+void AppendQuotedArg(const char* arg, std::wstring& out) {
+  AppendQuotedArg(WidenUtf8(arg), out);
 }
 
 // True if |envp| already carries its own "PATH=" entry, case-insensitively
@@ -127,10 +155,7 @@ std::wstring BuildEnvironmentBlock(char* const envp[]) {
   std::wstring block;
 
   for (char* const* entry = envp; *entry != nullptr; ++entry) {
-    for (const char* p = *entry; *p != '\0'; ++p) {
-      block += static_cast<wchar_t>(static_cast<unsigned char>(*p));
-    }
-
+    block += WidenUtf8(*entry);
     block += L'\0';
   }
 
@@ -167,14 +192,11 @@ std::wstring BuildEnvironmentBlock(char* const envp[]) {
 // would silently defeat RunAddr2Line()'s deliberately minimal child
 // environment: with no PATH entry to search, argv[0] alone would never
 // resolve.
-std::string ResolveExecutablePath(const char* name) {
-  if (std::strpbrk(name, "\\/") != nullptr) {
-    return name;
-  }
+std::wstring ResolveExecutablePath(const char* name) {
+  const std::wstring wide_name = WidenUtf8(name);
 
-  std::wstring wide_name;
-  for (const char* p = name; *p != '\0'; ++p) {
-    wide_name += static_cast<wchar_t>(static_cast<unsigned char>(*p));
+  if (std::strpbrk(name, "\\/") != nullptr) {
+    return wide_name;
   }
 
   wchar_t buffer[MAX_PATH];
@@ -183,15 +205,10 @@ std::string ResolveExecutablePath(const char* name) {
       static_cast<DWORD>(sizeof(buffer) / sizeof(buffer[0])), buffer, nullptr);
 
   if (length == 0 || length >= sizeof(buffer) / sizeof(buffer[0])) {
-    return name;
+    return wide_name;
   }
 
-  std::string resolved;
-  resolved.reserve(length);
-  for (DWORD i = 0; i < length; ++i) {
-    resolved += static_cast<char>(buffer[i]);
-  }
-  return resolved;
+  return std::wstring{buffer, length};
 }
 
 DWORD ClampTimeoutMillis(std::chrono::milliseconds timeout) {
@@ -393,8 +410,7 @@ bool Subprocess<SubprocessMode::kNormal>::Spawn(char* const argv[],
 
   std::wstring command_line;
   if (argv[0] != nullptr) {
-    const std::string resolved = ResolveExecutablePath(argv[0]);
-    AppendQuotedArg(resolved.c_str(), command_line);
+    AppendQuotedArg(ResolveExecutablePath(argv[0]), command_line);
   }
   for (char* const* arg = argv + 1; *arg != nullptr; ++arg) {
     AppendQuotedArg(*arg, command_line);
