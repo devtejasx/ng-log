@@ -91,7 +91,10 @@ static bool DoRawLog(char** buf, size_t* size, const char* format, ...) {
   va_start(ap, format);
   int n = std::vsnprintf(*buf, *size, format, ap);
   va_end(ap);
-  if (n < 0 || static_cast<size_t>(n) > *size) return false;
+  // vsnprintf returns the length it wanted to write and stops one short of
+  // *size to leave room for the terminating null, so n == *size already means
+  // the output was cut.
+  if (n < 0 || static_cast<size_t>(n) >= *size) return false;
   *size -= static_cast<size_t>(n);
   *buf += n;
   return true;
@@ -108,7 +111,7 @@ inline static bool VADoRawLog(char** buf, size_t* size, const char* format,
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif
-  if (n < 0 || static_cast<size_t>(n) > *size) return false;
+  if (n < 0 || static_cast<size_t>(n) >= *size) return false;
   *size -= static_cast<size_t>(n);
   *buf += n;
   return true;
