@@ -902,17 +902,18 @@ namespace nglog {
                     &what_to_do)                                           \
       .stream()
 
-#define SOME_KIND_OF_LOG_IF_EVERY_N(severity, condition, n, what_to_do)       \
-  static std::atomic<int> LOG_OCCURRENCES(0), LOG_OCCURRENCES_MOD_N(0);       \
-  NGLOG_IFDEF_THREAD_SANITIZER(AnnotateBenignRaceSized(                       \
-      __FILE__, __LINE__, &LOG_OCCURRENCES, sizeof(int), ""));                \
-  NGLOG_IFDEF_THREAD_SANITIZER(AnnotateBenignRaceSized(                       \
-      __FILE__, __LINE__, &LOG_OCCURRENCES_MOD_N, sizeof(int), ""));          \
-  ++LOG_OCCURRENCES;                                                          \
-  if ((condition) &&                                                          \
-      ((LOG_OCCURRENCES_MOD_N = (LOG_OCCURRENCES_MOD_N + 1) % n) == (1 % n))) \
-  nglog::LogMessage(__FILE__, __LINE__, NGLOG_##severity, LOG_OCCURRENCES,    \
-                    &what_to_do)                                              \
+#define SOME_KIND_OF_LOG_IF_EVERY_N(severity, condition, n, what_to_do)    \
+  static std::atomic<int> LOG_OCCURRENCES(0), LOG_OCCURRENCES_MOD_N(0);    \
+  NGLOG_IFDEF_THREAD_SANITIZER(AnnotateBenignRaceSized(                    \
+      __FILE__, __LINE__, &LOG_OCCURRENCES, sizeof(int), ""));             \
+  NGLOG_IFDEF_THREAD_SANITIZER(AnnotateBenignRaceSized(                    \
+      __FILE__, __LINE__, &LOG_OCCURRENCES_MOD_N, sizeof(int), ""));       \
+  ++LOG_OCCURRENCES;                                                       \
+  if ((condition) &&                                                       \
+      (++LOG_OCCURRENCES_MOD_N > n ? LOG_OCCURRENCES_MOD_N -= n            \
+                                   : LOG_OCCURRENCES_MOD_N.load()) == 1)   \
+  nglog::LogMessage(__FILE__, __LINE__, NGLOG_##severity, LOG_OCCURRENCES, \
+                    &what_to_do)                                           \
       .stream()
 
 #define SOME_KIND_OF_PLOG_EVERY_N(severity, n, what_to_do)              \
