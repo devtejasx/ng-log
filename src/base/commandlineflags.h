@@ -48,8 +48,10 @@
 #ifndef BASE_COMMANDLINEFLAGS_H__
 #define BASE_COMMANDLINEFLAGS_H__
 
-#include <cstdlib>  // for getenv
-#include <cstring>  // for memchr
+#include <cerrno>   // for errno
+#include <cstdlib>  // for getenv, strtol, strtoul
+#include <cstring>  // for memchr, strchr
+#include <limits>
 #include <string>
 
 #include "config.h"
@@ -145,12 +147,52 @@
                     : memchr("tTyY1\0", getenv(envname)[0], 6) != nullptr)
 
 #define EnvToInt(envname, dflt) \
-  (!getenv(envname) ? (dflt)    \
-                    : static_cast<int>(strtol(getenv(envname), nullptr, 10)))
+  ::nglog::internal::EnvValueToInt(getenv(envname), dflt)
 
 #define EnvToUInt(envname, dflt) \
-  (!getenv(envname)              \
-       ? (dflt)                  \
-       : static_cast<unsigned>(strtoul(getenv(envname), nullptr, 10)))
+  ::nglog::internal::EnvValueToUInt(getenv(envname), dflt)
+
+namespace nglog {
+namespace internal {
+
+// An integer flag keeps its default unless the whole value is a number in
+// range. Plain strtol() would read an empty value (a variable exported with
+// nothing in it) or a word such as "WARNING" as 0, and strtoul() would wrap
+// "-1" around to 4294967295.
+inline int EnvValueToInt(const char* value, int dflt) {
+  if (value == nullptr) {
+    return dflt;
+  }
+  char* end = nullptr;
+  errno = 0;
+  const long parsed = strtol(value, &end, 10);
+  if (end == value || *end != '\0' || errno == ERANGE ||
+      parsed < std::numeric_limits<int>::min() ||
+      parsed > std::numeric_limits<int>::max()) {
+    return dflt;
+  }
+  return static_cast<int>(parsed);
+}
+
+inline unsigned EnvValueToUInt(const char* value, unsigned dflt) {
+  if (value == nullptr) {
+    return dflt;
+  }
+  // strtoul() accepts a sign and negates the result.
+  if (strchr(value, '-') != nullptr) {
+    return dflt;
+  }
+  char* end = nullptr;
+  errno = 0;
+  const unsigned long parsed = strtoul(value, &end, 10);
+  if (end == value || *end != '\0' || errno == ERANGE ||
+      parsed > std::numeric_limits<unsigned>::max()) {
+    return dflt;
+  }
+  return static_cast<unsigned>(parsed);
+}
+
+}  // namespace internal
+}  // namespace nglog
 
 #endif  // BASE_COMMANDLINEFLAGS_H__

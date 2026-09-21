@@ -39,6 +39,7 @@
 #  include <pthread.h>
 #endif
 
+#include "base/commandlineflags.h"
 #include "internal/emscripten_console.h"
 #include "ng-log/logging.h"
 #include "testing_utilities.h"
@@ -136,6 +137,40 @@ TEST(utilities, SetThreadName) {
   EXPECT_STREQ(thread_name, kThreadName);
 }
 #endif
+
+// An integer flag environment variable that is unset, empty or not a number
+// in range keeps the flag's default. strtol() used to turn an empty value or
+// a word into 0, so NGLOG_stderrthreshold= copied every INFO message to
+// stderr, and strtoul() wrapped a negative value around to a huge one.
+TEST(commandlineflags, EnvValueToIntParsesNumbers) {
+  EXPECT_EQ(nglog::internal::EnvValueToInt("0", 2), 0);
+  EXPECT_EQ(nglog::internal::EnvValueToInt("3", 2), 3);
+  EXPECT_EQ(nglog::internal::EnvValueToInt("-1", 2), -1);
+  EXPECT_EQ(nglog::internal::EnvValueToInt("2147483647", 2), 2147483647);
+}
+
+TEST(commandlineflags, EnvValueToIntKeepsDefaultForInvalidValues) {
+  for (const char* value :
+       {"", "WARNING", "2x", "1.5", " ", "2147483648", "-2147483649"}) {
+    EXPECT_EQ(nglog::internal::EnvValueToInt(value, 2), 2)
+        << "value: \"" << value << "\"";
+  }
+  EXPECT_EQ(nglog::internal::EnvValueToInt(nullptr, 2), 2);
+}
+
+TEST(commandlineflags, EnvValueToUIntParsesNumbers) {
+  EXPECT_EQ(nglog::internal::EnvValueToUInt("0", 1800U), 0U);
+  EXPECT_EQ(nglog::internal::EnvValueToUInt("10", 1800U), 10U);
+  EXPECT_EQ(nglog::internal::EnvValueToUInt("4294967295", 1800U), 4294967295U);
+}
+
+TEST(commandlineflags, EnvValueToUIntKeepsDefaultForInvalidValues) {
+  for (const char* value : {"", "-1", " -1", "big", "10MB", "4294967296"}) {
+    EXPECT_EQ(nglog::internal::EnvValueToUInt(value, 1800U), 1800U)
+        << "value: \"" << value << "\"";
+  }
+  EXPECT_EQ(nglog::internal::EnvValueToUInt(nullptr, 1800U), 1800U);
+}
 
 int main(int argc, char** argv) {
   InitializeLogging(argv[0]);
