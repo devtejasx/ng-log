@@ -2168,6 +2168,14 @@ TEST(SafeFNMatch, logging) {
   CHECK(WrapSafeFNMatch("ba?/*", "bar/"));
   CHECK(!WrapSafeFNMatch("ba?/?", "bar/"));
   CHECK(!WrapSafeFNMatch("ba?/*", "bar"));
+  CHECK(WrapSafeFNMatch("*", ""));
+  CHECK(WrapSafeFNMatch("**", ""));
+  CHECK(WrapSafeFNMatch("foo**", "foo"));
+  CHECK(WrapSafeFNMatch("ba?/**", "bar/"));
+  CHECK(WrapSafeFNMatch("*o**", "foo"));
+  CHECK(!WrapSafeFNMatch("foo*?", "foo"));
+  CHECK(!WrapSafeFNMatch("foo**?", "foo"));
+  CHECK(!WrapSafeFNMatch("?", ""));
 }
 
 // TestWaitingLogSink will save messages here
