@@ -730,13 +730,27 @@ static void HandleSignal(int signal_number
 #endif
 
 #ifdef HAVE_STACKTRACE
-  // Get the stack traces.
-  void* stack[32];
+  // Get the stack traces. One frame more than is printed is captured, so that
+  // a trace cut off at the limit says so instead of looking complete.
+  constexpr int kMaxFrames = 32;
+  void* stack[kMaxFrames + 1];
   // +1 to exclude this function.
-  const int depth = GetStackTrace(stack, ARRAYSIZE(stack), 1);
+  int depth = GetStackTrace(stack, ARRAYSIZE(stack), 1);
+  const bool truncated = depth > kMaxFrames;
+  if (truncated) {
+    depth = kMaxFrames;
+  }
   // Dump the stack traces.
   for (int i = 0; i < depth; ++i) {
     DumpStackFrameInfoImpl("    ", stack[i]);
+  }
+  if (truncated) {
+    char buf[64];
+    MinimalFormatter formatter(buf, sizeof(buf));
+    formatter.AppendString("    ... (frames beyond the first ");
+    formatter.AppendUint64(static_cast<uint64>(kMaxFrames), 10);
+    formatter.AppendString(" omitted)\n");
+    g_failure_writer(buf, formatter.num_bytes_written());
   }
 #endif
 

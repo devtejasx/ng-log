@@ -278,9 +278,15 @@ static void DumpPC(DebugWriter* writerfn, void* arg, void* pc,
 
 // Dump current stack trace as directed by writerfn
 static void DumpStackTrace(int skip_count, DebugWriter* writerfn, void* arg) {
-  // Print stack trace
-  void* stack[32];
+  // Print stack trace. One frame more than is printed is captured, so that a
+  // trace cut off at the limit says so instead of looking complete.
+  constexpr int kMaxFrames = 32;
+  void* stack[kMaxFrames + 1];
   int depth = GetStackTrace(stack, ARRAYSIZE(stack), skip_count + 1);
+  const bool truncated = depth > kMaxFrames;
+  if (truncated) {
+    depth = kMaxFrames;
+  }
   for (int i = 0; i < depth; i++) {
 #  if defined(HAVE_SYMBOLIZE)
     if (FLAGS_symbolize_stacktrace) {
@@ -291,6 +297,12 @@ static void DumpStackTrace(int skip_count, DebugWriter* writerfn, void* arg) {
 #  else
     DumpPC(writerfn, arg, stack[i], "    ");
 #  endif
+  }
+  if (truncated) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf),
+                  "    ... (frames beyond the first %d omitted)\n", kMaxFrames);
+    writerfn(buf, arg);
   }
 }
 
