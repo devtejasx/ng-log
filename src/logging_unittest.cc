@@ -1028,6 +1028,47 @@ TEST(Logging, ConcurrentFatalMessages) {
   InstallFailureFunction(previous_failure_function);
 }
 
+TEST(LogToSink, Conditional) {
+  TestLogSinkImpl sink;
+  int evaluated = 0;
+
+  LOG_TO_SINK_IF(&sink, INFO, false) << "skipped " << ++evaluated;
+  LOG_TO_SINK_IF(&sink, INFO, true) << "collected " << ++evaluated;
+  LOG_TO_SINK_BUT_NOT_TO_LOGFILE_IF(&sink, INFO, false)
+      << "skipped " << ++evaluated;
+  LOG_TO_SINK_BUT_NOT_TO_LOGFILE_IF(&sink, INFO, true)
+      << "collected " << ++evaluated;
+
+  EXPECT_EQ(sink.errors.size(), 2u);
+  EXPECT_EQ(evaluated, 2);
+
+  // The macros must be usable as the body of an if without braces.
+  if (evaluated == 2)
+    LOG_TO_SINK_IF(&sink, INFO, true) << "inside if";
+  else
+    LOG_TO_SINK_IF(&sink, INFO, true) << "inside else";
+  EXPECT_EQ(sink.errors.size(), 3u);
+  EXPECT_TRUE(!sink.errors.empty() &&
+              sink.errors.back().find("inside if") != string::npos);
+}
+
+TEST(LogToSink, Debug) {
+  TestLogSinkImpl sink;
+  int evaluated = 0;
+
+  DLOG_TO_SINK(&sink, INFO) << "debug " << ++evaluated;
+  DLOG_TO_SINK_IF(&sink, INFO, true) << "debug if " << ++evaluated;
+  DLOG_TO_SINK_IF(&sink, INFO, false) << "never " << ++evaluated;
+
+#if DCHECK_IS_ON()
+  EXPECT_EQ(sink.errors.size(), 2u);
+  EXPECT_EQ(evaluated, 2);
+#else
+  EXPECT_EQ(sink.errors.size(), 0u);
+  EXPECT_EQ(evaluated, 0);
+#endif
+}
+
 // For testing using CHECK*() on anonymous enums.
 enum { CASE_A, CASE_B };
 

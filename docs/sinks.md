@@ -47,6 +47,12 @@ LOG_TO_SINK(sink, severity)` allows to log both to the sink and to a global log
 registry, e.g., a file, `#!cpp LOG_TO_SINK_BUT_NOT_TO_LOGFILE(sink, severity)`
 will avoid the latter.
 
+Both have conditional variants, `#!cpp LOG_TO_SINK_IF(sink, severity, condition)`
+and `#!cpp LOG_TO_SINK_BUT_NOT_TO_LOGFILE_IF(sink, severity, condition)`, and
+`#!cpp DLOG_TO_SINK(sink, severity)` and
+`#!cpp DLOG_TO_SINK_IF(sink, severity, condition)` log to the sink in debug
+mode only, like `DLOG`.
+
 !!! example "Using a custom sink"
     ``` cpp title="custom_sink.cc"
     -8<- "examples/custom_sink.cc:33:"
