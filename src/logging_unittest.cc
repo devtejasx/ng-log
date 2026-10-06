@@ -2566,11 +2566,14 @@ TEST(LogBacktraceAt, DoesBacktraceAtRightLineWhenEnabled) {
 // Recurses `depth` frames before the fatal LOG. Storing the result in a
 // volatile keeps the recursive call from becoming a tail call or a loop.
 NGLOG_ATTRIBUTE_NOINLINE static int FatalAtDepth(int depth) {
-  if (depth == 0) {
-    LOG(FATAL) << "fatal at depth";
+  if (depth > 0) {
+    volatile int result = FatalAtDepth(depth - 1);
+    return result + 1;
   }
-  volatile int result = FatalAtDepth(depth - 1);
-  return result + 1;
+  LOG(FATAL) << "fatal at depth";
+  // MSVC does not see LOG(FATAL) as noreturn and would otherwise warn
+  // (C4717) that every path recurses.
+  return 0;
 }
 
 TEST(LogFatalStackTrace, SaysWhenFramesAreOmitted) {
