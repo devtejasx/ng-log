@@ -2562,6 +2562,22 @@ TEST(LogBacktraceAt, DoesBacktraceAtRightLineWhenEnabled) {
 }
 #  endif  // HAVE_SYMBOLIZE
 
+#  ifdef GTEST_HAS_DEATH_TEST
+// Recurses `depth` frames before the fatal LOG. Storing the result in a
+// volatile keeps the recursive call from becoming a tail call or a loop.
+NGLOG_ATTRIBUTE_NOINLINE static int FatalAtDepth(int depth) {
+  if (depth == 0) {
+    LOG(FATAL) << "fatal at depth";
+  }
+  volatile int result = FatalAtDepth(depth - 1);
+  return result + 1;
+}
+
+TEST(LogFatalStackTrace, SaysWhenFramesAreOmitted) {
+  ASSERT_DEATH(FatalAtDepth(40), "frames beyond the first 32 omitted");
+}
+#  endif  // GTEST_HAS_DEATH_TEST
+
 #endif  // HAVE_STACKTRACE
 
 struct UserDefinedClass {
