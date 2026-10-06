@@ -2562,6 +2562,29 @@ TEST(LogBacktraceAt, DoesBacktraceAtRightLineWhenEnabled) {
 }
 #  endif  // HAVE_SYMBOLIZE
 
+// Recurses `depth` frames before capturing the stack trace. Using the result
+// after the recursive call keeps it from becoming a tail call or a loop.
+NGLOG_ATTRIBUTE_NOINLINE static std::string StackTraceAtDepth(int depth) {
+  if (depth > 0) {
+    std::string trace = StackTraceAtDepth(depth - 1);
+    volatile size_t size = trace.size();
+    static_cast<void>(size);
+    return trace;
+  }
+  return GetStackTrace();
+}
+
+TEST(GetStackTrace, SaysWhenFramesAreOmitted) {
+  const std::string trace = StackTraceAtDepth(40);
+  EXPECT_NE(trace.find("frames beyond the first 32 omitted"), string::npos)
+      << trace;
+}
+
+TEST(GetStackTrace, ShallowTraceIsNotMarkedAsCutOff) {
+  const std::string trace = StackTraceAtDepth(0);
+  EXPECT_EQ(trace.find("omitted"), string::npos) << trace;
+}
+
 #  ifdef GTEST_HAS_DEATH_TEST
 // Recurses `depth` frames before the fatal LOG. Storing the result in a
 // volatile keeps the recursive call from becoming a tail call or a loop.
