@@ -523,19 +523,27 @@ TEST(WindowsUtf8Path, ListsUnicodeDirectoryEntries) {
 
 TEST(WindowsUtf8Path, ClosesDirectoryWhenCallbackThrows) {
   constexpr char kCurrentDirectory[] = ".";
+  const auto search_and_throw = [&kCurrentDirectory] {
+    EXPECT_THROW(nglog::internal::ForEachDirectoryEntryUtf8(
+                     kCurrentDirectory, sizeof(kCurrentDirectory) - 1,
+                     [](const char*, std::size_t, void*) -> bool {
+                       throw std::runtime_error("callback failed");
+                     },
+                     nullptr),
+                 std::runtime_error);
+  };
+
+  // The first directory search and the first exception in a process open
+  // handles that stay open for its lifetime, so count around a later call.
+  search_and_throw();
+
   DWORD handles_before = 0;
   ASSERT_TRUE(GetProcessHandleCount(GetCurrentProcess(), &handles_before));
   if (handles_before == 0) {
     GTEST_SKIP() << "The process handle count is unavailable";
   }
 
-  EXPECT_THROW(nglog::internal::ForEachDirectoryEntryUtf8(
-                   kCurrentDirectory, sizeof(kCurrentDirectory) - 1,
-                   [](const char*, std::size_t, void*) -> bool {
-                     throw std::runtime_error("callback failed");
-                   },
-                   nullptr),
-               std::runtime_error);
+  search_and_throw();
 
   DWORD handles_after = 0;
   ASSERT_TRUE(GetProcessHandleCount(GetCurrentProcess(), &handles_after));
