@@ -345,6 +345,21 @@ The following flags are most commonly used:
     When `logtostderr` is `false`, the fatal message is also replayed through
     the configured logfile or `stdout` destination.
 
+`logtostdout` (`bool`, default=`false`)
+
+:   Use `stdout` as the only destination instead of logfiles. Takes precedence
+    over `logtostderr`. Messages are not copied to `stderr` according to
+    `stderrthreshold` in this mode.
+
+!!! tip "Logging only to the console"
+    With `logtostderr` or `logtostdout` set, no logfiles are created, so all
+    messages go to the console only. This suits applications whose console
+    output is already collected, for instance in a container:
+
+    ``` bash
+    NGLOG_logtostdout=1 ./your_application
+    ```
+
 `stderrthreshold` (`int32`, default=2, which is `ERROR`)
 
 :   Copy log messages at or above this severity level to `stderr` in addition
