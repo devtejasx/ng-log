@@ -217,8 +217,10 @@ bool InitializeVLOG3(SiteFlag& site_flag,
   const char* base = strrchr(fname, '/');
 
 #ifdef _WIN32
-  if (!base) {
-    base = strrchr(fname, '\\');
+  // Windows accepts either separator, also mixed within one path.
+  const char* const backslash = strrchr(fname, '\\');
+  if (backslash != nullptr && (base == nullptr || backslash > base)) {
+    base = backslash;
   }
 #endif
 

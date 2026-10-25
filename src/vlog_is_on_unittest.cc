@@ -56,6 +56,21 @@ TEST(SetVLOGLevel, OverridesMatchingWildcard) {
       },
       testing::ExitedWithCode(EXIT_SUCCESS), "");
 }
+
+#  ifdef _WIN32
+TEST(VModule, MatchesBasenameAfterMixedSeparators) {
+  EXPECT_EXIT(
+      {
+        nglog::SetFlag(FLAGS_vmodule,
+                       "mixed_separators=" + std::to_string(kModuleLevel));
+        nglog::SiteFlag site{};
+        const bool on = nglog::InitializeVLOG3(
+            site, FLAGS_v, "C:\\src/sub\\mixed_separators.cc", kModuleLevel);
+        std::exit(on ? EXIT_SUCCESS : EXIT_FAILURE);
+      },
+      testing::ExitedWithCode(EXIT_SUCCESS), "");
+}
+#  endif
 #endif
 
 int main(int argc, char** argv) {
